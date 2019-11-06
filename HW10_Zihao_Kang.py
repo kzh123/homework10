@@ -6,6 +6,7 @@ summarize student and instructor data
 from HW08_Zihao_Kang import file_reading_gen
 from collections import defaultdict
 from prettytable import PrettyTable
+import os as os
 
 
 class Repository:
@@ -14,26 +15,34 @@ class Repository:
     def __init__(self, dir_path, print_pt=False):
         """read all the things from all the place"""
 
-        self.grade_course_cwid, self.grade_course_student = Grades(dir_path + 'grades.txt').cwid_course_student()
+        self.grade_course_cwid, self.grade_course_student = Grades(os.path.join(dir_path, 'grades.txt')).cwid_course_student()
         """ {course:ins_CWID}        {course:students number(int)}"""
-        self.instructor_dict = Instructor(dir_path + 'instructors.txt').instructor_dict_CW()
+        self.instructor_dict = Instructor(os.path.join(dir_path, 'instructors.txt')).instructor_dict_CW()
         """ {CWID:[name:DEPT]}"""
 
-        self.student_dict = Student(dir_path + 'students.txt').student_dict_CW()
+        self.student_dict = Student(os.path.join(dir_path, 'students.txt')).student_dict_CW()
         """{CWID:[name,DEPT]}"""
-        self.student_id_course_dict = Grades(dir_path + 'grades.txt').student_id_course()
+        self.student_id_course_dict = Grades(os.path.join(dir_path, 'grades.txt')).student_id_course()
         """{CWID:[course1,course2...]}"""
 
-        self.major_R_dict = Major(dir_path + 'majors.txt').major_required()
-        self.major_E_dict = Major(dir_path + 'majors.txt').major_elective()
+        self.major_R_dict = Major(os.path.join(dir_path, 'majors.txt')).major_required()
+        self.major_E_dict = Major(os.path.join(dir_path, 'majors.txt')).major_elective()
+
+        self.pt_instructors = PrettyTable(field_names=['CWID', "Name", "Dept", "Course", "Students"])
+        self.pt_student = PrettyTable(field_names=["CWID", "Name", "Major", "Completed Courses", "Remaining Required", "Remaining Elective"])
+        self.pt_major = PrettyTable(field_names=["DEPT", "Required", "Electives"])
+
+        self.print_instructor_pt()
+        self.print_student_pt()
+        self.print_major_pt()
 
         if print_pt:
             print("Instructor Summary")
-            self.print_instructor_pt()
+            print(self.pt_instructors)
             print("Student Summary")
-            self.print_student_pt()
+            print(self.pt_student)
             print("Major Summary")
-            self.print_major_pt()
+            print(self.pt_major)
 
     def print_instructor_pt(self):
         """
@@ -42,32 +51,38 @@ class Repository:
         """
         instructor_dict_pt = dict()
         for key, value in self.grade_course_cwid.items():
-            instructor_dict_pt.update(
-                {key: {'CWID': value, 'name': self.instructor_dict[value][0], 'DEPT': self.instructor_dict[value][1],
-                       'student': self.grade_course_student[key]}})
+            try:
+                instructor_dict_pt.update(
+                    {key: {'CWID': value, 'name': self.instructor_dict[value][0], 'DEPT': self.instructor_dict[value][1],
+                           'student': self.grade_course_student[key]}})
+            except KeyError:
 
-        pt_instructors = PrettyTable(field_names=['CWID', "Name", "Dept", "Course", "Students"])
+                print("Data conflict in multiple data")
+
         for key, value in instructor_dict_pt.items():
-            pt_instructors.add_row([value['CWID'], value['name'], value['DEPT'], key, value['student']])
-        print(pt_instructors)
+            self.pt_instructors.add_row([value['CWID'], value['name'], value['DEPT'], key, value['student']])
 
     def print_student_pt(self):
         """print student pretty table"""
-        pt_student = PrettyTable(field_names=["CWID", "Name", "Major", "Completed Courses", "Remaining Required", "Remaining Elective"])
-        for key, value in self.student_dict.items():
-            pt_student.add_row([key, value[0], value[1], self.student_id_course_dict[key],
-                                set(self.major_R_dict[value[1]])-set(self.student_id_course_dict[key]),
-                                set(self.major_E_dict[value[1]])-set(self.student_id_course_dict[key])])
 
-        print(pt_student)
+        for key, value in self.student_dict.items():
+            try:
+                self.pt_student.add_row([key, value[0], value[1], self.student_id_course_dict[key],
+                                    set(self.major_R_dict[value[1]])-set(self.student_id_course_dict[key]),
+                                    set(self.major_E_dict[value[1]])-set(self.student_id_course_dict[key])])
+            except KeyError:
+                print("Data conflict in multiple data")
 
     def print_major_pt(self):
         """print major pretty table"""
-        pt_major = PrettyTable(field_names=["DEPT", "Required", "Electives"])
-        for key, value in self.major_R_dict.items():
-            pt_major.add_row([key, value, self.major_E_dict[key]])
 
-        print(pt_major)
+        for key, value in self.major_R_dict.items():
+            try:
+                self.pt_major.add_row([key, value, self.major_E_dict[key]])
+            except KeyError:
+                print("Data conflict in multiple data")
+
+
 
 
 class Student:
@@ -79,10 +94,10 @@ class Student:
             self.student_list = list(file_reading_gen(path, 3, sep=';', header=True))
         except ValueError:
             """can be changed in future homework"""
-            raise ValueError
+            print("Dirty data in students.txt")
         except FileNotFoundError:
             """Data not found"""
-            raise FileNotFoundError
+            print("Can not found students.txt")
 
         self.student_dict = defaultdict(dict)
 
@@ -102,10 +117,10 @@ class Instructor:
             self.instructor_list = list(file_reading_gen(path, 3, sep='|', header=True))
         except ValueError:
             """can be changed in future homework"""
-            raise ValueError
+            print("Dirty data in instructor.txt")
         except FileNotFoundError:
             """Data not found"""
-            raise FileNotFoundError
+            print("Can not found instructor.txt")
 
         self.instructor_dict = defaultdict(dict)
 
@@ -124,10 +139,10 @@ class Grades:
             self.grade_list_pre = list(file_reading_gen(path, 4, sep='|', header=True))
         except ValueError:
             """can be changed in future homework"""
-            raise ValueError
+            print("Dirty data in grades.txt")
         except FileNotFoundError:
             """Data not found"""
-            raise FileNotFoundError
+            print("Can not found grades.txt")
 
         self.grade_list = [item for item in self.grade_list_pre if item[2] not in ['D', 'E', 'F']]
 
@@ -159,10 +174,10 @@ class Major:
             self.major_list = list(file_reading_gen(path, 3, sep='\t', header=True))
         except ValueError:
             """Dirty data"""
-            raise ValueError
+            print("Dirty data in majors.txt")
         except FileNotFoundError:
             """Data not found"""
-            raise FileNotFoundError
+            print("Can not found majors.txt")
 
     def major_required(self):
         """return required courses for every major"""
@@ -185,3 +200,4 @@ class Major:
 
 if __name__ == '__main__':
     stevens = Repository('./', print_pt=True)
+    print(stevens.pt_student)
